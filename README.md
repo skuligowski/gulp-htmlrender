@@ -50,4 +50,4 @@ gulp.task('default', function () {
 
 ## License
 
-MIT © [Sindre Sorhus](http://sindresorhus.com)
+MIT © [Sebastian Kuligowski](http://kuligowski.pl)
