@@ -7,17 +7,32 @@ var gulp = require('gulp'),
 	watch = require('gulp-watch'),
 	batch = require('gulp-batch');
 
-gulp.task('default', function () {
+
+gulp.task('render', function() {
+	return gulp.src('test/test1.html', {cwd: 'src', read: false})
+		.pipe(render())
+		.pipe(gulp.dest('dist'));
+});
+
+gulp.task('default', ['render'], function () {
 	var filter = gulpFilter(['test1.html']);
 
-	gulp.src(['test/*.html', 'test2/*.html'], {cwd: 'src'})
-	 .pipe(watch(['**/*.html'], {cwd: 'src'}, batch(function(events, cb) {
-	 	console.log('inside batch')
-	 	return gulp.src(['test/test1.html'], {cwd: 'src'})
-	 		.pipe(render())
-	        .pipe(gulp.dest('dist'));
-	 })))
-     .pipe(cache());
+	watch(['src/**/*.html'], batch(function (events, done) {
+        gulp.start('render', done);
+    }));
+	//gulp.watch(['src/**/*.html'], ['render']);
+	// return gulp.src(['test/test1.html'], {cwd: 'src'})
+	//   		.pipe(render())
+	//         .pipe(gulp.dest('dist'));
+
+	// gulp.src(['test/*.html', 'test2/*.html'], {cwd: 'src'})
+	//  .pipe(watch(['**/*.html'], {cwd: 'src'}, batch(function(events, cb) {
+	//   	console.log('inside batch')
+	//   	return gulp.src(['test/test1.html'], {cwd: 'src'})
+	//   		.pipe(render())
+	//          .pipe(gulp.dest('dist'));
+	//   })))
+ //     .pipe(cache());
 
 });
 

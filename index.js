@@ -5,6 +5,7 @@ var _ = require('lodash');
 var multimatch = require('multimatch');
 var template = _.template;
 var path = require('path');
+var fs = require('fs');
 
 var varsCache = {},
 	partialsCache = {},
@@ -58,8 +59,10 @@ var varsCache = {},
 		return modifiedPartials.length > 0;
 	};
 
-	var includeFile = function(dir, html) {
-		var matches = html.match(includeRegExp);
+	var includePartial = function(partial) {
+		var dir = partial.dir,
+			html = partial.content,
+			matches = html.match(includeRegExp);
 
 		if (!matches) {
 			return html;
@@ -67,26 +70,50 @@ var varsCache = {},
 
 		for(var i = 0, max = matches.length; i < max; i++) {
 			var src = getAttr('src', matches[i]),
-				partialPath = path.join(dir, src),
-				partial = partialsCache[partialPath];
+				childPartialPath = path.join(dir, src),
+				childPartial = getPartial(childPartialPath);
 
-			if (typeof partial !== "undefined") {
-				var partialContent = includeFile(path.dirname(partialPath), partial.content);
-				html = html.replace(matches[i], partialContent);
-			} else {
-				console.log('Partial not found: ' + partialPath);
+			if (typeof childPartial !== "undefined") {
+				html = html.replace(matches[i], includePartial(childPartial));
 			}
 		}
 
 		return html;
 	};
 
-	var renderPartial = function(partialPath) {
-		var partial = partialsCache[partialPath];
-		if (!partial) {
-			console.log('Partial ' + partialPath + ' not found!');
+	function getPartialStat(partialPath) {
+		try {
+			return fs.statSync(partialPath);
+		} catch(e) {
+			return false;
 		}
-		return includeFile(path.dirname(partialPath), partial.content);
+	}
+
+	function getPartial(partialPath) {
+		var partial = partialsCache[partialPath],
+			stat = getPartialStat(partialPath);
+
+		if (!stat) {
+			console.log('ERROR: Partial ' + partialPath + 'does not exists');
+			return undefined;
+		}
+
+		if (!partial || partial.mtime < stat.mtime) {
+			console.log('updating: ' + partialPath)
+			var partialContent = fs.readFileSync(partialPath, 'utf8');
+			partial = partialsCache[partialPath] = {
+				content: partialContent,
+				mtime: stat.mtime,
+				dir: path.dirname(partialPath)
+			}
+		}
+
+		return partial;
+	}
+
+	var renderPartial = function(partialPath) {
+		var partial = getPartial(partialPath);
+		return includePartial(partial);
 	};
 
 	var evaluateVars = function(vars) {
@@ -104,6 +131,7 @@ var varsCache = {},
 function cache() {
 	var files = [];
 	return through.obj(function (file, enc, cb) {
+		console.log(file.stat);
 		partialsCache[file.path] = {
 			content: file.contents.toString(enc)
 		}
