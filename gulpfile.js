@@ -6,9 +6,15 @@ var gulp = require('gulp'),
 	gulpFilter = require('gulp-filter'),
 	watch = require('gulp-watch'),
 	batch = require('gulp-batch');
+var removeHtmlComments = require('gulp-remove-html-comments');
 
+gulp.task('prepareTemplates', function() {
+	return gulp.src(['src/**/*.html'])
+		.pipe(removeHtmlComments())
+		.pipe(cache());
+})
 
-gulp.task('render', function() {
+gulp.task('render', ['prepareTemplates'], function() {
 	return gulp.src('test/test1.html', {cwd: 'src', read: false})
 		.pipe(render())
 		.pipe(gulp.dest('dist'));

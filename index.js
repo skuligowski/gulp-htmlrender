@@ -89,6 +89,15 @@ var varsCache = {},
 		}
 	}
 
+	function cachePartial(partialPath, content, mtime) {
+		console.log('updating: ' + partialPath)
+		return partialsCache[partialPath] = {
+			content: content,
+			mtime: mtime,
+			dir: path.dirname(partialPath)
+		}
+	}
+
 	function getPartial(partialPath) {
 		var partial = partialsCache[partialPath],
 			stat = getPartialStat(partialPath);
@@ -99,16 +108,18 @@ var varsCache = {},
 		}
 
 		if (!partial || partial.mtime < stat.mtime) {
-			console.log('updating: ' + partialPath)
 			var partialContent = fs.readFileSync(partialPath, 'utf8');
-			partial = partialsCache[partialPath] = {
-				content: partialContent,
-				mtime: stat.mtime,
-				dir: path.dirname(partialPath)
-			}
+			partial = cachePartial(partialPath, partialContent, stat.mtime);
 		}
 
 		return partial;
+	}
+
+	function updatePartialFromVinyl(vinylFile) {
+		var partial = partialsCache[vinylFile.path];
+		if (!partial || partial.mtime < vinylFile.stat.mtime) {
+			cachePartial(vinylFile.path, vinylFile.contents.toString('utf8'), vinylFile.stat.mtime);
+		}
 	}
 
 	var renderPartial = function(partialPath) {
@@ -131,11 +142,7 @@ var varsCache = {},
 function cache() {
 	var files = [];
 	return through.obj(function (file, enc, cb) {
-		console.log(file.stat);
-		partialsCache[file.path] = {
-			content: file.contents.toString(enc)
-		}
-		console.log('caching: ' + file.path)
+		updatePartialFromVinyl(file);
 		this.push(file);
 		cb();
 	});
