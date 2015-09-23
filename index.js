@@ -102,9 +102,9 @@ var varsCache = {},
 
 	function updatePartialFromVinyl(vinylFile) {
 		var partial = partialsCache[vinylFile.path];
-		if (!partial || partial.mtime < vinylFile.stat.mtime) {
+		//if (!partial || partial.mtime < vinylFile.stat.mtime) {
 			cachePartial(vinylFile.path, vinylFile.contents.toString('utf8'), vinylFile.stat.mtime);
-		}
+		//}
 	}
 
 	function addMacro(name, attrs, generateFn) {
@@ -149,6 +149,7 @@ var varsCache = {},
 
 function cache() {
 	return through.obj(function (file, enc, cb) {
+		console.log(file.checksum)
 		updatePartialFromVinyl(file);
 		this.push(file);
 		cb();
