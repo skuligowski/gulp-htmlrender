@@ -40,25 +40,6 @@ var varsCache = {},
 		return html;
 	};
 
-	var refreshPartials = function(files) {
-		var modifiedPartials = [];
-		_.forEach(files, function(partialPath) {
-			var mtime = fs.statSync(partialPath).mtime,
-				currentPartial = partialsCache[partialPath];
-
-			if (!currentPartial || currentPartial.mtime < mtime) {
-				var partial = fs.readFileSync(partialPath);
-				partialsCache[partialPath] = {
-					content: renderTemplates(renderData(partial.toString())),
-					mtime: mtime
-				};
-				modifiedPartials.push(partialPath);
-				grunt.log.writeln('Refreshing ' + partialPath);
-			}
-		});
-		return modifiedPartials.length > 0;
-	};
-
 	var includePartial = function(partial) {
 		var dir = partial.dir,
 			html = partial.content,
@@ -140,7 +121,6 @@ var varsCache = {},
 
 
 function cache() {
-	var files = [];
 	return through.obj(function (file, enc, cb) {
 		updatePartialFromVinyl(file);
 		this.push(file);
@@ -149,7 +129,7 @@ function cache() {
 }
 
 
-function render(pattern) {
+function render() {
 	return through.obj(function (file, enc, cb) {
 		console.log('rendering: ' + file.path)
 		var newFile = file.clone({contents: false});
@@ -159,8 +139,8 @@ function render(pattern) {
 	});
 }
 
-module.exports.render = function (pattern) {
-	return render(pattern);
+module.exports.render = function() {
+	return render();
 };
 
 module.exports.cache = function() {
