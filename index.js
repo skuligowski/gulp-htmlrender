@@ -9,9 +9,9 @@ var fs = require('fs');
 
 var varsCache = {},
 	partialsCache = {},
+	macros = [],
 
-	includeRegExp = new RegExp("<%include([^>]+)%>", "gim"),
-	templateRegExp = new RegExp("<%template([^>]+)%>", "gim");
+	includeRegExp = new RegExp("<%include([^>]+)%>", "gim");
 
 	var getAttr = function(attr, content) {
 		var regExp = new RegExp(attr + '="([0-9a-zA-Z\/_.-]+)"');
@@ -71,7 +71,11 @@ var varsCache = {},
 	}
 
 	function cachePartial(partialPath, content, mtime) {
-		console.log('updating: ' + partialPath)
+		console.log('updating: ' + partialPath);
+
+		for(var i = 0; i < macros.length; i++)
+			content = macros[i](content);
+
 		return partialsCache[partialPath] = {
 			content: content,
 			mtime: mtime,
@@ -101,6 +105,29 @@ var varsCache = {},
 		if (!partial || partial.mtime < vinylFile.stat.mtime) {
 			cachePartial(vinylFile.path, vinylFile.contents.toString('utf8'), vinylFile.stat.mtime);
 		}
+	}
+
+	function addMacro(name, attrs, generateFn) {
+		var macroRegExp = new RegExp('<%' + name + '([^>]+)%>', 'gim'),
+			getAttrFns = [];
+
+		for(var i = 0; i < attrs.length; i++) {
+			var attrRegExp = new RegExp(attrs[i] + '="([0-9a-zA-Z\/_.-]+)"');
+			getAttrFns.push(function(content) {
+				var attrMatch = content.match(attrRegExp);
+				return attrMatch ? attrMatch[1] : null;
+			});
+		}
+
+		macros.push(function(html) {
+			return html.replace(macroRegExp, function(all, content) {
+				var callParams = [];
+				for(var i = 0; i < getAttrFns.length; i++)
+					callParams[i] = getAttrFns[i](content);
+
+				return generateFn.apply(this, callParams);
+			});
+		});
 	}
 
 	var renderPartial = function(partialPath) {
@@ -146,3 +173,5 @@ module.exports.render = function() {
 module.exports.cache = function() {
 	return cache();
 }
+
+module.exports.addMacro = addMacro;

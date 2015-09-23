@@ -8,6 +8,11 @@ var gulp = require('gulp'),
 	batch = require('gulp-batch');
 var removeHtmlComments = require('gulp-remove-html-comments');
 
+
+htmlrenderer.addMacro('template', ['id', 'src'], function(id, src) {
+	return '<script id="' + id + '" type="text/ng-template"><%include src="' + src + '"%></script>';
+});
+
 gulp.task('prepareTemplates', function() {
 	return gulp.src(['src/**/*.html'])
 		.pipe(removeHtmlComments())
