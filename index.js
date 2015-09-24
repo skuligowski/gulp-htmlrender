@@ -1,117 +1,120 @@
 'use strict';
 var gutil = require('gulp-util');
 var through = require('through2');
-var _ = require('lodash');
-var template = _.template;
 var path = require('path');
 var fs = require('fs');
 
 var varsCache = {},
 	partialsCache = {},
-	macros = {},
+	templates = {},
 	varRegExpCache = {},
-	includeRegExp = new RegExp("<%include([^>]+)%>", "gim");
+	attrRegExpCache = {},
+	includeRegExp = /<%include([^>]+)%>/gim,
+	attrTemplateRegExp = /\{\{[ ]*([a-zA-Z]+)[ ]*\}\}/gim,
+	getSrcAttr = createGetAttrFn('src');
 
-	var getAttr = function(attr, content) {
-		var regExp = new RegExp(attr + '="([0-9a-zA-Z\/_.-]+)"');
-		var attrMatch = content.match(regExp);
-		if (!attrMatch) {
-			return null;
-		}
+function includePartial(partial) {
+	var dir = partial.dir,
+		html = partial.content,
+		matches = html.match(includeRegExp);
 
-		return attrMatch[1];
-	};
-
-
-	var includePartial = function(partial) {
-		var dir = partial.dir,
-			html = partial.content,
-			matches = html.match(includeRegExp);
-
-		if (!matches) {
-			return html;
-		}
-
-		for(var i = 0, max = matches.length; i < max; i++) {
-			var src = getAttr('src', matches[i]),
-				childPartialPath = path.join(dir, src),
-				childPartial = getPartial(childPartialPath);
-
-			if (typeof childPartial !== "undefined") {
-				html = html.replace(matches[i], includePartial(childPartial));
-			}
-		}
-
+	if (!matches) {
 		return html;
-	};
+	}
 
-	function getPartialStat(partialPath) {
-		try {
-			return fs.statSync(partialPath);
-		} catch(e) {
-			return false;
+	for(var i = 0, max = matches.length; i < max; i++) {
+		var src = getSrcAttr(matches[i]),
+			childPartialPath = path.join(dir, src),
+			childPartial = getPartial(childPartialPath);
+
+		if (typeof childPartial !== "undefined") {
+			html = html.replace(matches[i], includePartial(childPartial));
 		}
 	}
 
-	function cachePartial(partialPath, content, mtime) {
-		return partialsCache[partialPath] = {
-			content: content,
-			mtime: mtime,
-			dir: path.dirname(partialPath)
-		}
+	return html;
+};
+
+function getPartialStat(partialPath) {
+	try {
+		return fs.statSync(partialPath);
+	} catch(e) {
+		return false;
+	}
+}
+
+function cachePartial(partialPath, content, mtime) {
+	return partialsCache[partialPath] = {
+		content: content,
+		mtime: mtime,
+		dir: path.dirname(partialPath)
+	}
+}
+
+function getPartial(partialPath) {
+	var partial = partialsCache[partialPath],
+		stat = getPartialStat(partialPath);
+
+	if (!stat) {
+		console.log('ERROR: Partial ' + partialPath + ' does not exists');
+		return undefined;
 	}
 
-	function getPartial(partialPath) {
-		var partial = partialsCache[partialPath],
-			stat = getPartialStat(partialPath);
-
-		if (!stat) {
-			console.log('ERROR: Partial ' + partialPath + ' does not exists');
-			return undefined;
-		}
-
-		if (!partial || partial.mtime < stat.mtime) {
-			var partialContent = fs.readFileSync(partialPath, 'utf8');
-			partial = cachePartial(partialPath, partialContent, stat.mtime);
-		}
-
-		return partial;
+	if (!partial || partial.mtime < stat.mtime) {
+		var partialContent = fs.readFileSync(partialPath, 'utf8');
+		partial = cachePartial(partialPath, partialContent, stat.mtime);
 	}
 
-	function updatePartialFromVinyl(vinylFile) {
-		var partial = partialsCache[vinylFile.path];
-		cachePartial(vinylFile.path, vinylFile.contents.toString('utf8'), vinylFile.stat.mtime);
+	return partial;
+}
+
+function updatePartialFromVinyl(vinylFile) {
+	var partial = partialsCache[vinylFile.path];
+	cachePartial(vinylFile.path, vinylFile.contents.toString('utf8'), vinylFile.stat.mtime);
+}
+
+function resolveTemplateAttrs(template) {
+	var match,
+		existingAttrs = {},
+		attrs = [];
+
+	while(match = attrTemplateRegExp.exec(template)) {
+		var attr = match[1];
+		if (!existingAttrs[attr]) {
+			attrs.push(attr);
+			existingAttrs[attr] = true;
+		}
+	}
+	return attrs;
+}
+
+function addTemplate(name, template) {
+	var templateRegExp = new RegExp('<%' + name + '([^>]+)%>', 'gim'),
+		attrs = resolveTemplateAttrs(template),
+		getAttrFns = [];
+
+	for(var i = 0; i < attrs.length; i++) {
+		getAttrFns.push(createGetAttrFn(attrs[i]));
 	}
 
-	function addMacro(name, attrs, generateFn) {
-		var macroRegExp = new RegExp('<%' + name + '([^>]+)%>', 'gim'),
-			getAttrFns = [];
+	templates[name] = function(html) {
+		return html.replace(templateRegExp, function(all, content) {
+			var valuesMap = {};
+			for (var i = 0; i < attrs.length; i++) {
+				valuesMap[attrs[i]] = getAttrFns[i](content);
+			}
 
-		for(var i = 0; i < attrs.length; i++) {
-			var attrRegExp = new RegExp(attrs[i] + '="([0-9a-zA-Z\/_.-]+)"');
-			getAttrFns.push(function(content) {
-				var attrMatch = content.match(attrRegExp);
-				return attrMatch ? attrMatch[1] : null;
+			return template.replace(attrTemplateRegExp, function(all, attr) {
+				return valuesMap[attr] || all;
 			});
-		}
-
-		macros[name] = function(html) {
-			return html.replace(macroRegExp, function(all, content) {
-				var callParams = [];
-				for(var i = 0; i < getAttrFns.length; i++)
-					callParams[i] = getAttrFns[i](content);
-
-				return generateFn.apply(this, callParams);
-			});
-		};
-	}
-
-	var renderPartial = function(partialPath) {
-		var partial = getPartial(partialPath);
-		return includePartial(partial);
+		});
 	};
+}
 
-
+function renderPartial(partialPath) {
+	var partial = getPartial(partialPath);
+	return includePartial(partial);
+};
 
 
 function cache() {
@@ -133,6 +136,16 @@ function render() {
 	});
 }
 
+function getAttrRegExp(attr) {
+	return attrRegExpCache[attr] || (varRegExpCache[attr] = new RegExp(attr + '="([ 0-9a-zA-Z\/_.-]+)"'));
+}
+
+function createGetAttrFn(attr) {
+	return function(html) {
+		var attrMatch = html.match(getAttrRegExp(attr));
+		return attrMatch ? attrMatch[1] : null;
+	}
+}
 
 function getVarRegExp(varName) {
 	return varRegExpCache[varName] || (varRegExpCache[varName] = new RegExp('<%=\\s*'+varName+'\\s*%>', 'g'));
@@ -146,7 +159,7 @@ function createVarDecorator(varName, value) {
 
 function createVarsDecorators(vars) {
 	var decoratorFns = [];
-	for(var varName in vars) {
+	for(var varName in vars) if (vars.hasOwnProperty(varName)) {
 		var value = typeof vars[varName] === 'function' ? vars[varName]() : vars[varName];
 		decoratorFns.push(createVarDecorator(varName, value));
 	}
@@ -162,9 +175,9 @@ function createDecorator() {
 			decoratorFns = decoratorFns.concat(createVarsDecorators(vars));
 			return api;
 		},
-		macro: function(macroName) {
+		template: function(templateName) {
 			decoratorFns.push(function(content) {
-				return macros[macroName](content);
+				return templates[templateName](content);
 			});
 			return api;
 		},
@@ -175,6 +188,7 @@ function createDecorator() {
 		apply: function() {
 			return through.obj(function (file, enc, cb) {
 				var contents = file.contents.toString('utf8');
+
 				for (var i = 0; i < decoratorFns.length; i++)
 					contents = decoratorFns[i](contents);
 
@@ -200,4 +214,4 @@ module.exports.cache = function() {
 module.exports.decorator = function() {
 	return createDecorator();
 };
-module.exports.addMacro = addMacro;
+module.exports.addTemplate = addTemplate;

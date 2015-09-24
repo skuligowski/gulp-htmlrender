@@ -9,12 +9,10 @@ var gulp = require('gulp'),
 var removeHtmlComments = require('gulp-remove-html-comments');
 
 
-htmlrenderer.addMacro('template', ['id', 'src'], function(id, src) {
-	return '<script id="' + id + '" type="text/ng-template"><%include src="' + src + '"%></script>';
-});
+htmlrenderer.addTemplate('template', '<script id="{{id}}" type="text/ng-template"><%include src="{{src}}"%></script>');
 
 gulp.task('decoratePartials', function() {
-	return gulp.src(['../pekaotb/tb/src/tb-app/tb.html'])
+	return gulp.src(['index.html'])
 		.pipe(htmlrenderer.decorator()
 			.vars({
 				stylesPath: 'styles.css',
@@ -22,7 +20,7 @@ gulp.task('decoratePartials', function() {
 					return 'scripts.js'
 				}
 			})
-			.macro('template')
+			.template('template')
 			.fn(function(content) {
 				return 'a' + content + 'x';
 			})
@@ -31,7 +29,7 @@ gulp.task('decoratePartials', function() {
 })
 
 gulp.task('render', ['decoratePartials'], function() {
-	return gulp.src('../pekaotb/tb/src/tb-app/tb.html', {read: false})
+	return gulp.src('index.html', {read: false})
 		.pipe(render())
 		.pipe(gulp.dest('dist'));
 });
@@ -39,7 +37,7 @@ gulp.task('render', ['decoratePartials'], function() {
 gulp.task('default', ['render'], function () {
 	var filter = gulpFilter(['test1.html']);
 
-	watch(['../pekaotb/tb/src/**/*.html'], batch(function (events, done) {
+	watch(['*.html'], batch(function (events, done) {
         gulp.start('render', done);
     }));
 	//gulp.watch(['src/**/*.html'], ['render']);

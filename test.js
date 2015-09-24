@@ -63,22 +63,58 @@ it('should decorate using function variables', function (cb) {
 	stream.end();
 });
 
-it('should decorate using macro', function (cb) {
-	var stream = htmlrender.decorator().vars({
-		someVar: 'test',
-		otherVar: function() {
-			return 'fn';
-		}
-	}).apply();
+it('should decorate using template', function (cb) {
+	htmlrender.addTemplate('info', '<div class="{{class}}">{{text}}</div>');
+
+	var stream = htmlrender.decorator().template('info').apply();
 
 	stream.on('data', function (data) {
-		assert.equal(data.contents.toString(), '<li>test</li><li>fn</li>');
+		assert.equal(data.contents.toString(),
+			'<body><div class="warn">This is the warning</div></body>');
 	});
 
 	stream.on('end', cb);
 
 	stream.write(new gutil.File({
-		contents: new Buffer('<li><%=someVar%></li><li><%=otherVar%></li>')
+		contents: new Buffer('<body><%info class="warn" text="This is the warning"%></body>')
+	}));
+
+	stream.end();
+});
+
+it('should not resolve missing param when template', function (cb) {
+	htmlrender.addTemplate('info', '<div class="{{class}}">{{text}}</div>');
+
+	var stream = htmlrender.decorator().template('info').apply();
+
+	stream.on('data', function (data) {
+		assert.equal(data.contents.toString(),
+			'<body><div class="warn">{{text}}</div></body>');
+	});
+
+	stream.on('end', cb);
+
+	stream.write(new gutil.File({
+		contents: new Buffer('<body><%info class="warn"%></body>')
+	}));
+
+	stream.end();
+});
+
+it('should resolve with whitespaces', function (cb) {
+	htmlrender.addTemplate('info', '<div class="{{ class }}">{{ text  }}</div>');
+
+	var stream = htmlrender.decorator().template('info').apply();
+
+	stream.on('data', function (data) {
+		assert.equal(data.contents.toString(),
+			'<body><div class="warn">This is the info</div></body>');
+	});
+
+	stream.on('end', cb);
+
+	stream.write(new gutil.File({
+		contents: new Buffer('<body><%info class="warn" text="This is the info" %></body>')
 	}));
 
 	stream.end();
