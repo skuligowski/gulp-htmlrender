@@ -5,22 +5,28 @@ var data = require('gulp-data');
 var htmlrender = require('./');
 
 
-it('should decorate using custom function', function (cb) {
-	var stream = htmlrender.decorator().fn(function(content) {
-		return 'START_' + content + '_END';
-	}).apply();
-
+function assertContent(stream, content, expected, cb) {
 	stream.on('data', function (data) {
-		assert.equal(data.contents.toString(), 'START_<li>foo</li><li>bar</li>_END');
+		assert.equal(data.contents.toString(), expected);
 	});
 
 	stream.on('end', cb);
 
 	stream.write(new gutil.File({
-		contents: new Buffer('<li>foo</li><li>bar</li>')
+		contents: new Buffer(content)
 	}));
 
 	stream.end();
+}
+
+it('should decorate using custom function', function (cb) {
+	var stream = htmlrender.decorator().fn(function(content) {
+		return 'START_' + content + '_END';
+	}).apply();
+	var data = '<li>foo</li><li>bar</li>';
+	var expected = 'START_<li>foo</li><li>bar</li>_END';
+
+	assertContent(stream, data, expected, cb);
 });
 
 it('should decorate using static variables', function (cb) {
@@ -29,17 +35,10 @@ it('should decorate using static variables', function (cb) {
 		otherVar: 'other'
 	}).apply();
 
-	stream.on('data', function (data) {
-		assert.equal(data.contents.toString(), '<li>test</li><li>other</li>');
-	});
+	var data = '<li><%=someVar%></li><li><%=otherVar%></li>';
+	var expected = '<li>test</li><li>other</li>';
 
-	stream.on('end', cb);
-
-	stream.write(new gutil.File({
-		contents: new Buffer('<li><%=someVar%></li><li><%=otherVar%></li>')
-	}));
-
-	stream.end();
+	assertContent(stream, data, expected, cb);
 });
 
 it('should decorate using function variables', function (cb) {
@@ -50,72 +49,38 @@ it('should decorate using function variables', function (cb) {
 		}
 	}).apply();
 
-	stream.on('data', function (data) {
-		assert.equal(data.contents.toString(), '<li>test</li><li>fn</li>');
-	});
+	var data = '<li><%=someVar%></li><li><%=otherVar%></li>';
+	var expected = '<li>test</li><li>fn</li>';
 
-	stream.on('end', cb);
-
-	stream.write(new gutil.File({
-		contents: new Buffer('<li><%=someVar%></li><li><%=otherVar%></li>')
-	}));
-
-	stream.end();
+	assertContent(stream, data, expected, cb);
 });
 
 it('should decorate using template', function (cb) {
 	htmlrender.addTemplate('info', '<div class="{{class}}">{{text}}</div>');
 
 	var stream = htmlrender.decorator().template('info').apply();
+	var data = '<body><%info class="warn" text="This is the warning"%></body>';
+	var expected = '<body><div class="warn">This is the warning</div></body>';
 
-	stream.on('data', function (data) {
-		assert.equal(data.contents.toString(),
-			'<body><div class="warn">This is the warning</div></body>');
-	});
-
-	stream.on('end', cb);
-
-	stream.write(new gutil.File({
-		contents: new Buffer('<body><%info class="warn" text="This is the warning"%></body>')
-	}));
-
-	stream.end();
+	assertContent(stream, data, expected, cb);
 });
 
 it('should not resolve missing param when template', function (cb) {
 	htmlrender.addTemplate('info', '<div class="{{class}}">{{text}}</div>');
 
 	var stream = htmlrender.decorator().template('info').apply();
+	var data = '<body><%info class="warn"%></body>';
+	var expected = '<body><div class="warn">{{text}}</div></body>';
 
-	stream.on('data', function (data) {
-		assert.equal(data.contents.toString(),
-			'<body><div class="warn">{{text}}</div></body>');
-	});
-
-	stream.on('end', cb);
-
-	stream.write(new gutil.File({
-		contents: new Buffer('<body><%info class="warn"%></body>')
-	}));
-
-	stream.end();
+	assertContent(stream, data, expected, cb);
 });
 
 it('should resolve with whitespaces', function (cb) {
 	htmlrender.addTemplate('info', '<div class="{{ class }}">{{ text  }}</div>');
 
 	var stream = htmlrender.decorator().template('info').apply();
+	var data = '<body><%info class="warn" text="This is the info" %></body>';
+	var expected = '<body><div class="warn">This is the info</div></body>';
 
-	stream.on('data', function (data) {
-		assert.equal(data.contents.toString(),
-			'<body><div class="warn">This is the info</div></body>');
-	});
-
-	stream.on('end', cb);
-
-	stream.write(new gutil.File({
-		contents: new Buffer('<body><%info class="warn" text="This is the info" %></body>')
-	}));
-
-	stream.end();
+	assertContent(stream, data, expected, cb);
 });
