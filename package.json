@@ -1,6 +1,6 @@
 {
   "name": "gulp-htmlrender",
-  "version": "0.0.2",
+  "version": "0.0.3",
   "description": "Render html files from relative partials",
   "license": "MIT",
   "repository": "skuligowski/gulp-htmlrender",

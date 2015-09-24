@@ -13,14 +13,25 @@ htmlrenderer.addMacro('template', ['id', 'src'], function(id, src) {
 	return '<script id="' + id + '" type="text/ng-template"><%include src="' + src + '"%></script>';
 });
 
-gulp.task('prepareTemplates', function() {
-	return gulp.src(['src/**/*.html'])
-		.pipe(removeHtmlComments())
-		.pipe(cache());
+gulp.task('decoratePartials', function() {
+	return gulp.src(['../pekaotb/tb/src/tb-app/tb.html'])
+		.pipe(htmlrenderer.decorator()
+			.vars({
+				stylesPath: 'styles.css',
+				scriptsPath: function() {
+					return 'scripts.js'
+				}
+			})
+			.macro('template')
+			.fn(function(content) {
+				return 'a' + content + 'x';
+			})
+			.apply())
+		.pipe(htmlrenderer.cache());
 })
 
-gulp.task('render', ['prepareTemplates'], function() {
-	return gulp.src('test/test1.html', {cwd: 'src', read: false})
+gulp.task('render', ['decoratePartials'], function() {
+	return gulp.src('../pekaotb/tb/src/tb-app/tb.html', {read: false})
 		.pipe(render())
 		.pipe(gulp.dest('dist'));
 });
@@ -28,7 +39,7 @@ gulp.task('render', ['prepareTemplates'], function() {
 gulp.task('default', ['render'], function () {
 	var filter = gulpFilter(['test1.html']);
 
-	watch(['src/**/*.html'], batch(function (events, done) {
+	watch(['../pekaotb/tb/src/**/*.html'], batch(function (events, done) {
         gulp.start('render', done);
     }));
 	//gulp.watch(['src/**/*.html'], ['render']);

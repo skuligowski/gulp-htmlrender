@@ -2,15 +2,14 @@
 var gutil = require('gulp-util');
 var through = require('through2');
 var _ = require('lodash');
-var multimatch = require('multimatch');
 var template = _.template;
 var path = require('path');
 var fs = require('fs');
 
 var varsCache = {},
 	partialsCache = {},
-	macros = [],
-
+	macros = {},
+	varRegExpCache = {},
 	includeRegExp = new RegExp("<%include([^>]+)%>", "gim");
 
 	var getAttr = function(attr, content) {
@@ -23,22 +22,6 @@ var varsCache = {},
 		return attrMatch[1];
 	};
 
-	var renderTemplates = function(html) {
-		return html.replace(templateRegExp, function(all, content) {
-			var id = getAttr('id', content),
-				src = getAttr('src', content);
-
-			return '<script id="' + id + '" type="text/ng-template"><%include src="' + src + '"%></script>';
-		});
-	};
-
-	var renderData = function(html) {
-		_.forEach(varsCache, function(value, prop) {
-			var re = new RegExp('<%=\\s*'+prop+'\\s*%>', 'g');
-			html = html.replace(re, value);
-		});
-		return html;
-	};
 
 	var includePartial = function(partial) {
 		var dir = partial.dir,
@@ -71,11 +54,6 @@ var varsCache = {},
 	}
 
 	function cachePartial(partialPath, content, mtime) {
-		console.log('updating: ' + partialPath);
-
-		for(var i = 0; i < macros.length; i++)
-			content = macros[i](content);
-
 		return partialsCache[partialPath] = {
 			content: content,
 			mtime: mtime,
@@ -88,7 +66,7 @@ var varsCache = {},
 			stat = getPartialStat(partialPath);
 
 		if (!stat) {
-			console.log('ERROR: Partial ' + partialPath + 'does not exists');
+			console.log('ERROR: Partial ' + partialPath + ' does not exists');
 			return undefined;
 		}
 
@@ -102,9 +80,7 @@ var varsCache = {},
 
 	function updatePartialFromVinyl(vinylFile) {
 		var partial = partialsCache[vinylFile.path];
-		//if (!partial || partial.mtime < vinylFile.stat.mtime) {
-			cachePartial(vinylFile.path, vinylFile.contents.toString('utf8'), vinylFile.stat.mtime);
-		//}
+		cachePartial(vinylFile.path, vinylFile.contents.toString('utf8'), vinylFile.stat.mtime);
 	}
 
 	function addMacro(name, attrs, generateFn) {
@@ -119,7 +95,7 @@ var varsCache = {},
 			});
 		}
 
-		macros.push(function(html) {
+		macros[name] = function(html) {
 			return html.replace(macroRegExp, function(all, content) {
 				var callParams = [];
 				for(var i = 0; i < getAttrFns.length; i++)
@@ -127,7 +103,7 @@ var varsCache = {},
 
 				return generateFn.apply(this, callParams);
 			});
-		});
+		};
 	}
 
 	var renderPartial = function(partialPath) {
@@ -135,21 +111,11 @@ var varsCache = {},
 		return includePartial(partial);
 	};
 
-	var evaluateVars = function(vars) {
-		var oldVars = _.clone(varsCache);
-		varsCache = {};
-		_.forEach(vars, function(value, paramName) {
-			varsCache[paramName] = _.isFunction(value) ? value() : value;
-		});
-		return !_.isEqual(oldVars, varsCache);
-	};
-
 
 
 
 function cache() {
 	return through.obj(function (file, enc, cb) {
-		console.log(file.checksum)
 		updatePartialFromVinyl(file);
 		this.push(file);
 		cb();
@@ -167,6 +133,62 @@ function render() {
 	});
 }
 
+
+function getVarRegExp(varName) {
+	return varRegExpCache[varName] || (varRegExpCache[varName] = new RegExp('<%=\\s*'+varName+'\\s*%>', 'g'));
+}
+
+function createVarDecorator(varName, value) {
+	return function(content) {
+		return content.replace(getVarRegExp(varName), value);
+	}
+}
+
+function createVarsDecorators(vars) {
+	var decoratorFns = [];
+	for(var varName in vars) {
+		var value = typeof vars[varName] === 'function' ? vars[varName]() : vars[varName];
+		decoratorFns.push(createVarDecorator(varName, value));
+	}
+	return decoratorFns;
+}
+
+function createDecorator() {
+	var decoratorFns = [],
+		argsToArray = Array.prototype.slice;
+
+	var api = {
+		vars: function(vars) {
+			decoratorFns = decoratorFns.concat(createVarsDecorators(vars));
+			return api;
+		},
+		macro: function(macroName) {
+			decoratorFns.push(function(content) {
+				return macros[macroName](content);
+			});
+			return api;
+		},
+		fn: function(fn) {
+			decoratorFns.push(fn);
+			return api;
+		},
+		apply: function() {
+			return through.obj(function (file, enc, cb) {
+				var contents = file.contents.toString('utf8');
+				for (var i = 0; i < decoratorFns.length; i++)
+					contents = decoratorFns[i](contents);
+
+				var newFile = file.clone({contents: false});
+				newFile.contents = new Buffer(contents);
+				this.push(newFile);
+				cb();
+			});
+		}
+	};
+
+	return api;
+}
+
 module.exports.render = function() {
 	return render();
 };
@@ -175,4 +197,7 @@ module.exports.cache = function() {
 	return cache();
 }
 
+module.exports.decorator = function() {
+	return createDecorator();
+};
 module.exports.addMacro = addMacro;
