@@ -13,6 +13,11 @@ var varsCache = {},
 	attrTemplateRegExp = /\{\{[ ]*([a-zA-Z]+)[ ]*\}\}/gim,
 	getSrcAttr = createGetAttrFn('src');
 
+function renderPartial(partialPath) {
+	var partial = getPartial(partialPath);
+	return includePartial(partial);
+}
+
 function includePartial(partial) {
 	var dir = partial.dir,
 		html = partial.content,
@@ -35,6 +40,24 @@ function includePartial(partial) {
 	return html;
 };
 
+function getPartial(partialPath) {
+	var partial = partialsCache[partialPath],
+		stat = getPartialStat(partialPath);
+
+	if (!stat) {
+		gutil.log(gutil.colors.red('ERROR:'), 'Partial', partialPath, 'does not exists');
+		gutil.beep();
+		return undefined;
+	}
+
+	if (!partial || partial.mtime < stat.mtime) {
+		var partialContent = fs.readFileSync(partialPath, 'utf8');
+		partial = cachePartial(partialPath, partialContent, stat.mtime);
+	}
+
+	return partial;
+}
+
 function getPartialStat(partialPath) {
 	try {
 		return fs.statSync(partialPath);
@@ -51,41 +74,9 @@ function cachePartial(partialPath, content, mtime) {
 	}
 }
 
-function getPartial(partialPath) {
-	var partial = partialsCache[partialPath],
-		stat = getPartialStat(partialPath);
-
-	if (!stat) {
-		console.log('ERROR: Partial ' + partialPath + ' does not exists');
-		return undefined;
-	}
-
-	if (!partial || partial.mtime < stat.mtime) {
-		var partialContent = fs.readFileSync(partialPath, 'utf8');
-		partial = cachePartial(partialPath, partialContent, stat.mtime);
-	}
-
-	return partial;
-}
-
 function updatePartialFromVinyl(vinylFile) {
 	var partial = partialsCache[vinylFile.path];
 	cachePartial(vinylFile.path, vinylFile.contents.toString('utf8'), vinylFile.stat.mtime);
-}
-
-function resolveTemplateAttrs(template) {
-	var match,
-		existingAttrs = {},
-		attrs = [];
-
-	while(match = attrTemplateRegExp.exec(template)) {
-		var attr = match[1];
-		if (!existingAttrs[attr]) {
-			attrs.push(attr);
-			existingAttrs[attr] = true;
-		}
-	}
-	return attrs;
 }
 
 function addTemplate(name, template) {
@@ -111,29 +102,19 @@ function addTemplate(name, template) {
 	};
 }
 
-function renderPartial(partialPath) {
-	var partial = getPartial(partialPath);
-	return includePartial(partial);
-};
+function resolveTemplateAttrs(template) {
+	var match,
+		existingAttrs = {},
+		attrs = [];
 
-
-function cache() {
-	return through.obj(function (file, enc, cb) {
-		updatePartialFromVinyl(file);
-		this.push(file);
-		cb();
-	});
-}
-
-
-function render() {
-	return through.obj(function (file, enc, cb) {
-		console.log('rendering: ' + file.path)
-		var newFile = file.clone({contents: false});
-		newFile.contents = new Buffer(renderPartial(newFile.path));
-		this.push(newFile);
-		cb();
-	});
+	while(match = attrTemplateRegExp.exec(template)) {
+		var attr = match[1];
+		if (!existingAttrs[attr]) {
+			attrs.push(attr);
+			existingAttrs[attr] = true;
+		}
+	}
+	return attrs;
 }
 
 function getAttrRegExp(attr) {
@@ -167,8 +148,7 @@ function createVarsDecorators(vars) {
 }
 
 function createDecorator() {
-	var decoratorFns = [],
-		argsToArray = Array.prototype.slice;
+	var decoratorFns = [];
 
 	var api = {
 		vars: function(vars) {
@@ -187,6 +167,16 @@ function createDecorator() {
 		},
 		apply: function() {
 			return through.obj(function (file, enc, cb) {
+				if (file.isNull()) {
+					cb(null, file);
+					return;
+				}
+
+				if (file.isStream()) {
+					cb(new gutil.PluginError('gulp-htmlrender:decorator', 'Streaming not supported'));
+					return;
+				}
+
 				var contents = file.contents.toString('utf8');
 
 				for (var i = 0; i < decoratorFns.length; i++)
@@ -201,6 +191,39 @@ function createDecorator() {
 	};
 
 	return api;
+}
+
+function cache() {
+	return through.obj(function (file, enc, cb) {
+		if (file.isNull()) {
+			cb(null, file);
+			return;
+		}
+
+		if (file.isStream()) {
+			cb(new gutil.PluginError('gulp-htmlrender:cache', 'Streaming not supported'));
+			return;
+		}
+
+		updatePartialFromVinyl(file);
+		this.push(file);
+		cb();
+	});
+}
+
+
+function render() {
+	return through.obj(function (file, enc, cb) {
+		if (file.isStream()) {
+			cb(new gutil.PluginError('gulp-htmlrender:render', 'Streaming not supported'));
+			return;
+		}
+
+		var newFile = file.clone({contents: false});
+		newFile.contents = new Buffer(renderPartial(newFile.path));
+		this.push(newFile);
+		cb();
+	});
 }
 
 module.exports.render = function() {
