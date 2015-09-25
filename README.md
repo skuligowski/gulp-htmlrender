@@ -1,52 +1,176 @@
-# gulp-template [![Build Status](https://travis-ci.org/sindresorhus/gulp-template.svg?branch=master)](https://travis-ci.org/sindresorhus/gulp-template)
-
-> Render/precompile [Lo-Dash/Underscore templates](http://lodash.com/docs#template)
-
-*Issues with the output should be reported on the Lo-Dash [issue tracker](https://github.com/lodash/lodash/issues).*
-
+# gulp-template 
 
 ## Install
 
 ```
-$ npm install --save-dev gulp-template
+$ npm install --save-dev gulp-htmlrender
 ```
 
 
-## Usage
+## Basic usage
 
-### `src/greeting.html`
+### `src/index.html`
 
-```erb
-<h1>Hello <%= name %></h1>
+```html
+<div class="main">
+	<%include src="layout/header.html"%>
+</div>
+```
+
+### `src/layout/header.html`
+
+```html
+<h3 class="header">Hello!</h3>
 ```
 
 ### `gulpfile.js`
 
 ```js
 var gulp = require('gulp');
-var template = require('gulp-template');
+var htmlrender = require('gulp-htmlrender');
 
-gulp.task('default', function () {
-	return gulp.src(['test/*.html'], {cwd: 'src'})
-			 .pipe(watch(['**/*.html'], {cwd: 'src'}, batch(function(events, cb) {
-			 	return gulp.src(['test/test1.html'], {cwd: 'src'})
-			 		.pipe(render())
-			        .pipe(gulp.dest('dist'));
-			 })))
-		     .pipe(cache());
+gulp.task('render', function() {
+	return gulp.src('src/index.html', {read: false})
+		.pipe(htmlrender.render())
+		.pipe(gulp.dest('dist'));
+});
+
+gulp.task('default', function() {
+	gulp.watch(['src/**/*.html'], ['render']);
 });
 ```
 
-### `dist/greeting.html`
+### `dist/index.html`
 
 ```html
-<h1>Hello Sindre</h1>
+<div class="main">
+	<h3 class="header">Hello!</h3>
+</div>
+```
+
+
+## Modifying partials before rendering
+
+### `gulpfile.js`
+
+```js
+var gulp = require('gulp');
+var htmlrender = require('gulp-htmlrender');
+var removeHtmlComments = require('gulp-remove-html-comments');
+
+gulp.task('decorate', function() {
+	return gulp.src('src/index.html')
+		.pipe(removeHtmlComments())
+		.pipe(htmlrender.cache());
+});
+
+gulp.task('render', ['decorate'], function() {
+	return gulp.src('src/index.html', {read: false})
+		.pipe(htmlrender.render())
+		.pipe(gulp.dest('dist'));
+});
+```
+
+
+## Applying custom templates
+
+### `src/index.html`
+
+```html
+<body>
+	<%template id="tpl/some-template" src="modules/some-template.html"%>
+</body>
+```
+
+### `src/modules/some-template.html`
+
+```html
+<div>Some template</div>
+```
+
+### `gulpfile.js`
+
+```js
+var gulp = require('gulp');
+var htmlrender = require('gulp-htmlrender');
+
+htmlrender.addTemplate('template', 
+	'<script id="{{id}}" type="text/ng-template">'+
+		'<%include src="{{src}}"%>'+
+	'</script>');
+
+gulp.task('decorate', function() {
+	return gulp.src('src/index.html')
+		.pipe(htmlrender.decorator().template('template').apply())
+		.pipe(htmlrender.cache());
+});
+
+gulp.task('render', ['decorate'], function() {
+	return gulp.src('src/index.html', {read: false})
+		.pipe(htmlrender.render())
+		.pipe(gulp.dest('dist'));
+});
+```
+
+### `dist/index.html`
+
+```html
+<body>
+	<script id="tpl/some-template" type="text/ng-template">
+		<div>Some template</div>
+	</script>
+</body>
+```
+
+
+## Decorating with static and dynamic variables
+
+### `src/index.html`
+
+```html
+<div class="version"><%=version%></div>
+<div class="timestamp"><%=timestamp%></div>
+```
+
+### `gulpfile.js`
+
+```js
+var gulp = require('gulp');
+var htmlrender = require('gulp-htmlrender');
+
+gulp.task('decorate', function() {
+	return gulp.src('src/index.html')
+		.pipe(htmlrender.decorator().
+			.vars({
+				version: '2.0.1',
+				timestamp: function() {
+					return new Date().getTime()
+				}
+			}).apply())
+		.pipe(htmlrender.cache());
+});
+
+gulp.task('render', ['decorate'], function() {
+	return gulp.src('src/index.html', {read: false})
+		.pipe(htmlrender.render())
+		.pipe(gulp.dest('dist'));
+});
+```
+
+### `dist/index.html`
+
+```html
+<div class="version">2.0.1</div>
+<div class="timestamp">1443219469588</div>
 ```
 
 
 ## API
 
-### template(data, [options])
+### render()
+### cache()
+### decorator()
+### addTemplate()
 
 ## License
 

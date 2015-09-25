@@ -1,6 +1,6 @@
 {
   "name": "gulp-htmlrender",
-  "version": "0.0.3",
+  "version": "0.1.0",
   "description": "Render html files from relative partials",
   "license": "MIT",
   "repository": "skuligowski/gulp-htmlrender",
@@ -29,14 +29,10 @@
   ],
   "dependencies": {
     "gulp-util": "^3.0.0",
-    "lodash": "^3.1.0",
     "through2": "^0.6.1"
   },
   "devDependencies": {
-    "gulp-batch": "^1.0.5",
-    "gulp-data": "^1.0.2",
-    "gulp-filter": "^3.0.1",
     "mocha": "*",
-    "multimatch": "^2.0.0"
+    "gulp-data": "^1.0.2"
   }
 }
