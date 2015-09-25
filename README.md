@@ -165,6 +165,31 @@ gulp.task('render', ['decorate'], function() {
 ```
 
 
+## Chaining multiple decorators
+
+### `gulpfile.js`
+
+```js
+gulp.task('decorate', function() {
+	return gulp.src('src/index.html')
+		.pipe(htmlrender.decorator()
+			.vars({
+				staticVar: 'value',
+				dynamicVar: function() {
+					return 'value'
+				}
+			})
+			.template('template')
+			.fn(function(content) {
+				return '<div>' + content + '</div>';
+			})
+			.apply())
+		.pipe(htmlrender.cache());
+});
+```
+
+
+
 ## API
 
 ### render()
