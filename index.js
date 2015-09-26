@@ -28,8 +28,15 @@ function includePartial(partial) {
 	}
 
 	for(var i = 0, max = matches.length; i < max; i++) {
-		var src = getSrcAttr(matches[i]),
-			childPartialPath = path.join(dir, src),
+		var src = getSrcAttr(matches[i]);
+		if (!src) {
+			gutil.log(gutil.colors.red('ERROR:'), 'Invalid src attribute in',
+				gutil.colors.green(matches[i]), gutil.colors.blue('(' + partial.path + ')'));
+			gutil.beep();
+			continue;
+		}
+
+		var childPartialPath = path.join(dir, src),
 			childPartial = getPartial(childPartialPath);
 
 		if (typeof childPartial !== "undefined") {
@@ -70,7 +77,8 @@ function cachePartial(partialPath, content, mtime) {
 	return partialsCache[partialPath] = {
 		content: content,
 		mtime: mtime,
-		dir: path.dirname(partialPath)
+		dir: path.dirname(partialPath),
+		path: partialPath
 	}
 }
 
