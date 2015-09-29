@@ -32,7 +32,6 @@ function includePartial(partial) {
 		if (!src) {
 			gutil.log(gutil.colors.red('ERROR:'), 'Invalid src attribute in',
 				gutil.colors.green(matches[i]), gutil.colors.blue('(' + partial.path + ')'));
-			gutil.beep();
 			continue;
 		}
 
@@ -53,7 +52,6 @@ function getPartial(partialPath) {
 
 	if (!stat) {
 		gutil.log(gutil.colors.red('ERROR:'), 'Partial', partialPath, 'does not exists');
-		gutil.beep();
 		return undefined;
 	}
 
