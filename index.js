@@ -6,10 +6,10 @@ var fs = require('fs');
 
 var varsCache = {},
 	partialsCache = {},
-	templates = {},
+	templates = [],
 	varRegExpCache = {},
 	attrRegExpCache = {},
-	includeRegExp = /<%include([^>]+)%>/gim,
+	includeRegExp = /<%include ([^>]+)%>/gim,
 	attrTemplateRegExp = /\{\{[ ]*([a-zA-Z]+)[ ]*\}\}/gim,
 	getSrcAttr = createGetAttrFn('src');
 
@@ -71,9 +71,15 @@ function getPartialStat(partialPath) {
 	}
 }
 
+function applyTemplates(html) {
+	for(var i = 0; i < templates.length; i++)
+		html = templates[i](html);
+	return html;
+}
+
 function cachePartial(partialPath, content, mtime) {
 	return partialsCache[partialPath] = {
-		content: content,
+		content: applyTemplates(content),
 		mtime: mtime,
 		dir: path.dirname(partialPath),
 		path: partialPath
@@ -86,7 +92,7 @@ function updatePartialFromVinyl(vinylFile) {
 }
 
 function addTemplate(name, template) {
-	var templateRegExp = new RegExp('<%' + name + '([^>]+)%>', 'gim'),
+	var templateRegExp = new RegExp('<%' + name + ' ([^>]+)%>', 'gim'),
 		attrs = resolveTemplateAttrs(template),
 		getAttrFns = [];
 
@@ -94,7 +100,7 @@ function addTemplate(name, template) {
 		getAttrFns.push(createGetAttrFn(attrs[i]));
 	}
 
-	templates[name] = function(html) {
+	templates.push(function(html) {
 		return html.replace(templateRegExp, function(all, content) {
 			var valuesMap = {};
 			for (var i = 0; i < attrs.length; i++) {
@@ -105,7 +111,7 @@ function addTemplate(name, template) {
 				return valuesMap[attr] || all;
 			});
 		});
-	};
+	});
 }
 
 function resolveTemplateAttrs(template) {
@@ -124,7 +130,7 @@ function resolveTemplateAttrs(template) {
 }
 
 function getAttrRegExp(attr) {
-	return attrRegExpCache[attr] || (varRegExpCache[attr] = new RegExp(attr + '="([ 0-9a-zA-Z\/_.-]+)"'));
+	return attrRegExpCache[attr] || (varRegExpCache[attr] = new RegExp(attr + '="([^"]+)"'));
 }
 
 function createGetAttrFn(attr) {
@@ -159,12 +165,6 @@ function createDecorator() {
 	var api = {
 		vars: function(vars) {
 			decoratorFns = decoratorFns.concat(createVarsDecorators(vars));
-			return api;
-		},
-		template: function(templateName) {
-			decoratorFns.push(function(content) {
-				return templates[templateName](content);
-			});
 			return api;
 		},
 		fn: function(fn) {

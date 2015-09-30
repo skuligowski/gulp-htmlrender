@@ -75,36 +75,6 @@ it('should decorate using function variables', function (cb) {
 	assertDecorated(stream, data, expected, cb);
 });
 
-it('should decorate using template', function (cb) {
-	htmlrender.addTemplate('info', '<div class="{{class}}">{{text}}</div>');
-
-	var stream = htmlrender.decorator().template('info').apply();
-	var data = '<body><%info class="warn" text="This is the warning"%></body>';
-	var expected = '<body><div class="warn">This is the warning</div></body>';
-
-	assertDecorated(stream, data, expected, cb);
-});
-
-it('should not resolve missing param when template', function (cb) {
-	htmlrender.addTemplate('info', '<div class="{{class}}">{{text}}</div>');
-
-	var stream = htmlrender.decorator().template('info').apply();
-	var data = '<body><%info class="warn"%></body>';
-	var expected = '<body><div class="warn">{{text}}</div></body>';
-
-	assertDecorated(stream, data, expected, cb);
-});
-
-it('should resolve with whitespaces', function (cb) {
-	htmlrender.addTemplate('info', '<div class="{{ class }}">{{ text  }}</div>');
-
-	var stream = htmlrender.decorator().template('info').apply();
-	var data = '<body><%info class="warn" text="This is the info" %></body>';
-	var expected = '<body><div class="warn">This is the info</div></body>';
-
-	assertDecorated(stream, data, expected, cb);
-});
-
 it('should render without precacheing', function (cb) {
 	assertRendered('simple.html', cb);
 });
@@ -119,4 +89,20 @@ it('should render with relative includes', function (cb) {
 
 it('should render with deeply nested includes', function (cb) {
 	assertRendered('deeply-nested.html', cb);
+});
+
+it('should render angular template with include', function (cb) {
+	htmlrender.addTemplate('template', '<script id="{{id}}" type="text/ng-template"><%include src="{{src}}"%></script>');
+	assertRendered('angular-template.html', cb);
+});
+
+it('should render custom template with whitespaces and special chars', function (cb) {
+	htmlrender.addTemplate('info', '<div class="{{  class }}">{{ text }}</div>');
+	assertRendered('ws-in-template.html', cb);
+});
+
+it('should render nested templates', function (cb) {
+	htmlrender.addTemplate('infobox', '<div class="infobox"><%info class="{{class}}" text="{{text}}"%></div>');
+	htmlrender.addTemplate('info', '<div class="{{  class }}">{{ text }}</div>');
+	assertRendered('nested-templates.html', cb);
 });
