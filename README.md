@@ -99,13 +99,7 @@ htmlrender.addTemplate('template',
 		'<%include src="{{src}}"%>'+
 	'</script>');
 
-gulp.task('decorate', function() {
-	return gulp.src('src/index.html')
-		.pipe(htmlrender.decorator().template('template').apply())
-		.pipe(htmlrender.cache());
-});
-
-gulp.task('render', ['decorate'], function() {
+gulp.task('render', function() {
 	return gulp.src('src/index.html', {read: false})
 		.pipe(htmlrender.render())
 		.pipe(gulp.dest('dist'));
@@ -179,7 +173,6 @@ gulp.task('decorate', function() {
 					return 'value'
 				}
 			})
-			.template('template')
 			.fn(function(content) {
 				return '<div>' + content + '</div>';
 			})
