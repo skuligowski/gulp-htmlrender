@@ -236,6 +236,7 @@ The following content will be saved in partials cache. During rendering all incl
 ### addTemplate()
 ### addTransform()
 
+
 ## Release history
 
 ### 0.3.0
