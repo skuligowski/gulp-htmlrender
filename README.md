@@ -49,30 +49,20 @@ gulp.task('default', function() {
 ```
 
 
-## Modifying partials before rendering
+## Glob patterns for `src` attribute of `include` tag
 
-### `gulpfile.js`
+Glob patterns can be used to include more than one partial at once. All included files will be separated with `\n` delimiter.
 
-```js
-var gulp = require('gulp');
-var htmlrender = require('gulp-htmlrender');
-var removeHtmlComments = require('gulp-remove-html-comments');
-
-gulp.task('decorate', function() {
-	return gulp.src('src/index.html')
-		.pipe(removeHtmlComments())
-		.pipe(htmlrender.cache());
-});
-
-gulp.task('render', ['decorate'], function() {
-	return gulp.src('src/index.html', {read: false})
-		.pipe(htmlrender.render())
-		.pipe(gulp.dest('dist'));
-});
+```html
+<div class="main">
+	<%include src="layout/**/*.html"%>
+</div>
 ```
 
 
-## Applying custom templates
+## Custom templates - AngularJS inlined template example
+
+Custom tags can be defined to render more complicated content. 
 
 ### `src/index.html`
 
@@ -117,7 +107,35 @@ gulp.task('render', function() {
 ```
 
 
+## Modifying partials before rendering
+
+Before each rendering phase, some individual partials can be decorated and pushed in the renderer cache. You can pipe custom gulp plugins directly before `htmlrenderer.cache()` invocation.
+
+### `gulpfile.js`
+
+```js
+var gulp = require('gulp');
+var htmlrender = require('gulp-htmlrender');
+var removeHtmlComments = require('gulp-remove-html-comments');
+
+gulp.task('decorate', function() {
+	return gulp.src('src/index.html')
+		.pipe(removeHtmlComments())
+		.pipe(htmlrender.cache());
+});
+
+gulp.task('render', ['decorate'], function() {
+	return gulp.src('src/index.html', {read: false})
+		.pipe(htmlrender.render())
+		.pipe(gulp.dest('dist'));
+});
+```
+
+
+
 ## Decorating with static and dynamic variables
+
+More advanced decoration allows to render inlined variables inside of partials.
 
 ### `src/index.html`
 
@@ -182,6 +200,49 @@ gulp.task('decorate', function() {
 ```
 
 
+## Transforming included content at render phase
+
+Transform functions can be defined to modify included partial before rendering. 
+
+### `src/templates.yaml`
+
+```yaml
+tpl/main-view: ../layout/main.html
+tpl/modal-view: ../layout/modal.html
+```
+
+### `src/index.html`
+
+```html
+	<%include src="templates.yaml" transform="yaml2html"%>
+```
+
+### `gulpfile.js`
+
+```js
+htmlrender.addTransform('yaml2html', function(yamlString) {
+	var yamlObject = yamljs.parse(yamlString);
+	return _.map(yamlObject, function(tpl, id) { 
+		return '<script id="' + id + '"><%include src="' + tpl + '"%></script>';
+	})
+});
+
+gulp.task('render', function() {
+	return gulp.src('src/index.html', {read: false})
+		.pipe(htmlrender.render())
+		.pipe(gulp.dest('dist'));
+});
+```
+
+### `src/index.html` transformed
+
+The following content will be saved in partials cache. During rendering all includes will be resolved to referenced files.
+
+```html
+<script id="tpl/main-view"><%include src="../layout/main.html"%></script>
+<script id="tpl/modal-view"><%include src="../layout/modal.html"%></script>
+```
+
 
 ## API
 
@@ -189,6 +250,7 @@ gulp.task('decorate', function() {
 ### cache()
 ### decorator()
 ### addTemplate()
+### addTransform()
 
 ## License
 
