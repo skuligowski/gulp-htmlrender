@@ -3,6 +3,7 @@ var gutil = require('gulp-util');
 var through = require('through2');
 var path = require('path');
 var fs = require('fs');
+var glob = require('glob');
 
 var varsCache = {},
 	partialsCache = {},
@@ -18,6 +19,13 @@ function renderPartial(partialPath) {
 	return includePartial(partial);
 }
 
+function getPartialContent(dir, src) {
+	var childPartialPath = path.join(dir, src),
+		childPartial = getPartial(childPartialPath);
+
+	return (typeof childPartial !== 'undefined') ? includePartial(childPartial) : '';
+}
+
 function includePartial(partial) {
 	var dir = partial.dir,
 		html = partial.content,
@@ -29,17 +37,25 @@ function includePartial(partial) {
 
 	for(var i = 0, max = matches.length; i < max; i++) {
 		var src = getSrcAttr(matches[i]);
+
 		if (!src) {
 			gutil.log(gutil.colors.red('ERROR:'), 'Invalid src attribute in',
 				gutil.colors.green(matches[i]), gutil.colors.blue('(' + partial.path + ')'));
 			continue;
 		}
 
-		var childPartialPath = path.join(dir, src),
-			childPartial = getPartial(childPartialPath);
+		var partialContent = '';
+		if (glob.hasMagic(src)) {
+			var files = glob.sync(src, {cwd: dir}).sort();
+			for(var j = 0; j < files.length; j++) {
+				partialContent += getPartialContent(dir, files[j]);
+			}
+		} else {
+			partialContent = getPartialContent(dir, src);
+		}
 
-		if (typeof childPartial !== "undefined") {
-			html = html.replace(matches[i], includePartial(childPartial));
+		if (partialContent) {
+			html = html.replace(matches[i], partialContent);
 		}
 	}
 

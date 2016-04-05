@@ -28,6 +28,7 @@
     "precompile"
   ],
   "dependencies": {
+    "glob": "^7.0.3",
     "gulp-util": "^3.0.0",
     "through2": "^0.6.1"
   },

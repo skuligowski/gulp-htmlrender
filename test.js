@@ -106,3 +106,11 @@ it('should render nested templates', function (cb) {
 	htmlrender.addTemplate('info', '<div class="{{  class }}">{{ text }}</div>');
 	assertRendered('nested-templates.html', cb);
 });
+
+it('should render include with glob patterns', function (cb) {
+	assertRendered('glob-template.html', cb);
+});
+
+it('should not render file when glob pattern does not match', function (cb) {
+	assertRendered('empty-glob-template.html', cb);
+});
