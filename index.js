@@ -5,8 +5,7 @@ var path = require('path');
 var fs = require('fs');
 var glob = require('glob');
 
-var varsCache = {},
-	partialsCache = {},
+var partialsCache = {},
 	transformsCache = {},
 	templates = [],
 	varRegExpCache = {},
@@ -14,7 +13,10 @@ var varsCache = {},
 	includeRegExp = /<%include ([^>]+)%>/gim,
 	attrTemplateRegExp = /\{\{[ ]*([a-zA-Z]+)[ ]*\}\}/gim,
 	getSrcAttr = createGetAttrFn('src'),
-	getTransformAttr = createGetAttrFn('transform');
+	getTransformAttr = createGetAttrFn('transform'),
+	options = {
+		delimiter: '\n'
+	};
 
 function renderPartial(partialPath) {
 	var partial = getPartial(partialPath);
@@ -50,10 +52,12 @@ function includePartial(partial) {
 
 		var partialContent = '';
 		if (glob.hasMagic(src)) {
-			var files = glob.sync(src, {cwd: dir}).sort();
+			var files = glob.sync(src, {cwd: dir}).sort(),
+				htmlParts = [];
 			for(var j = 0; j < files.length; j++) {
-				partialContent += getPartialContent(dir, files[j], transform);
+				htmlParts.push(getPartialContent(dir, files[j], transform));
 			}
+			partialContent = htmlParts.join(options.delimiter);
 		} else {
 			partialContent = getPartialContent(dir, src, transform);
 		}
@@ -64,7 +68,7 @@ function includePartial(partial) {
 	}
 
 	return html;
-};
+}
 
 function getPartial(partialPath, transform) {
 	var partial = partialsCache[partialPath],
@@ -92,8 +96,9 @@ function getPartialStat(partialPath) {
 }
 
 function applyTemplates(html) {
-	for(var i = 0; i < templates.length; i++)
+	for(var i = 0; i < templates.length; i++) {
 		html = templates[i](html);
+	}
 	return html;
 }
 
@@ -106,17 +111,19 @@ function applyTransform(content, transform, partialPath) {
 }
 
 function cachePartial(partialPath, content, transform, mtime) {
-	return partialsCache[partialPath] = {
-		content: applyTransform(applyTemplates(content), transform, partialPath),
-		mtime: mtime,
-		dir: path.dirname(partialPath),
-		path: partialPath,
-		transform: transform ? transform : null
-	}
+	var templatedContent = applyTemplates(content),
+		transformedContent = applyTransform(templatedContent, transform, partialPath),
+		partial = partialsCache[partialPath] = {
+			content: transformedContent,
+			mtime: mtime,
+			dir: path.dirname(partialPath),
+			path: partialPath,
+			transform: transform ? transform : null
+		};
+	return partial;
 }
 
 function updatePartialFromVinyl(vinylFile) {
-	var partial = partialsCache[vinylFile.path];
 	cachePartial(vinylFile.path, vinylFile.contents.toString('utf8'), null, vinylFile.stat.mtime);
 }
 
@@ -152,7 +159,7 @@ function resolveTemplateAttrs(template) {
 		existingAttrs = {},
 		attrs = [];
 
-	while(match = attrTemplateRegExp.exec(template)) {
+	while(!!(match = attrTemplateRegExp.exec(template))) {
 		var attr = match[1];
 		if (!existingAttrs[attr]) {
 			attrs.push(attr);
@@ -170,7 +177,7 @@ function createGetAttrFn(attr) {
 	return function(html) {
 		var attrMatch = html.match(getAttrRegExp(attr));
 		return attrMatch ? attrMatch[1] : null;
-	}
+	};
 }
 
 function getVarRegExp(varName) {
@@ -180,14 +187,16 @@ function getVarRegExp(varName) {
 function createVarDecorator(varName, value) {
 	return function(content) {
 		return content.replace(getVarRegExp(varName), value);
-	}
+	};
 }
 
 function createVarsDecorators(vars) {
 	var decoratorFns = [];
-	for(var varName in vars) if (vars.hasOwnProperty(varName)) {
-		var value = typeof vars[varName] === 'function' ? vars[varName]() : vars[varName];
-		decoratorFns.push(createVarDecorator(varName, value));
+	for(var varName in vars) {
+		if (vars.hasOwnProperty(varName)) {
+			var value = typeof vars[varName] === 'function' ? vars[varName]() : vars[varName];
+			decoratorFns.push(createVarDecorator(varName, value));
+		}
 	}
 	return decoratorFns;
 }
@@ -218,8 +227,9 @@ function createDecorator() {
 
 				var contents = file.contents.toString('utf8');
 
-				for (var i = 0; i < decoratorFns.length; i++)
+				for (var i = 0; i < decoratorFns.length; i++) {
 					contents = decoratorFns[i](contents);
+				}
 
 				var newFile = file.clone({contents: false});
 				newFile.contents = new Buffer(contents);
@@ -271,7 +281,7 @@ module.exports.render = function() {
 
 module.exports.cache = function() {
 	return cache();
-}
+};
 
 module.exports.decorator = function() {
 	return createDecorator();
