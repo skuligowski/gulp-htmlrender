@@ -7,21 +7,23 @@ var glob = require('glob');
 
 var varsCache = {},
 	partialsCache = {},
+	transformsCache = {},
 	templates = [],
 	varRegExpCache = {},
 	attrRegExpCache = {},
 	includeRegExp = /<%include ([^>]+)%>/gim,
 	attrTemplateRegExp = /\{\{[ ]*([a-zA-Z]+)[ ]*\}\}/gim,
-	getSrcAttr = createGetAttrFn('src');
+	getSrcAttr = createGetAttrFn('src'),
+	getTransformAttr = createGetAttrFn('transform');
 
 function renderPartial(partialPath) {
 	var partial = getPartial(partialPath);
 	return includePartial(partial);
 }
 
-function getPartialContent(dir, src) {
+function getPartialContent(dir, src, transform) {
 	var childPartialPath = path.join(dir, src),
-		childPartial = getPartial(childPartialPath);
+		childPartial = getPartial(childPartialPath, transform);
 
 	return (typeof childPartial !== 'undefined') ? includePartial(childPartial) : '';
 }
@@ -44,14 +46,16 @@ function includePartial(partial) {
 			continue;
 		}
 
+		var transform = getTransformAttr(matches[i]);
+
 		var partialContent = '';
 		if (glob.hasMagic(src)) {
 			var files = glob.sync(src, {cwd: dir}).sort();
 			for(var j = 0; j < files.length; j++) {
-				partialContent += getPartialContent(dir, files[j]);
+				partialContent += getPartialContent(dir, files[j], transform);
 			}
 		} else {
-			partialContent = getPartialContent(dir, src);
+			partialContent = getPartialContent(dir, src, transform);
 		}
 
 		if (partialContent) {
@@ -62,7 +66,7 @@ function includePartial(partial) {
 	return html;
 };
 
-function getPartial(partialPath) {
+function getPartial(partialPath, transform) {
 	var partial = partialsCache[partialPath],
 		stat = getPartialStat(partialPath);
 
@@ -71,9 +75,9 @@ function getPartial(partialPath) {
 		return undefined;
 	}
 
-	if (!partial || partial.mtime < stat.mtime) {
+	if (!partial || partial.mtime < stat.mtime || partial.transform != transform) {
 		var partialContent = fs.readFileSync(partialPath, 'utf8');
-		partial = cachePartial(partialPath, partialContent, stat.mtime);
+		partial = cachePartial(partialPath, partialContent, transform, stat.mtime);
 	}
 
 	return partial;
@@ -93,18 +97,27 @@ function applyTemplates(html) {
 	return html;
 }
 
-function cachePartial(partialPath, content, mtime) {
+function applyTransform(content, transform, partialPath) {
+	var transformFn = transformsCache[transform];
+	if (transform && !transformFn) {
+		gutil.log(gutil.colors.red('ERROR:'), 'Transform', transform, 'does not exists');
+	}
+	return transformFn ? transformFn(content, partialPath) : content;
+}
+
+function cachePartial(partialPath, content, transform, mtime) {
 	return partialsCache[partialPath] = {
-		content: applyTemplates(content),
+		content: applyTransform(applyTemplates(content), transform, partialPath),
 		mtime: mtime,
 		dir: path.dirname(partialPath),
-		path: partialPath
+		path: partialPath,
+		transform: transform ? transform : null
 	}
 }
 
 function updatePartialFromVinyl(vinylFile) {
 	var partial = partialsCache[vinylFile.path];
-	cachePartial(vinylFile.path, vinylFile.contents.toString('utf8'), vinylFile.stat.mtime);
+	cachePartial(vinylFile.path, vinylFile.contents.toString('utf8'), null, vinylFile.stat.mtime);
 }
 
 function addTemplate(name, template) {
@@ -128,6 +141,10 @@ function addTemplate(name, template) {
 			});
 		});
 	});
+}
+
+function addTransform(name, transformFn) {
+	transformsCache[name] = transformFn;
 }
 
 function resolveTemplateAttrs(template) {
@@ -260,3 +277,4 @@ module.exports.decorator = function() {
 	return createDecorator();
 };
 module.exports.addTemplate = addTemplate;
+module.exports.addTransform = addTransform;
