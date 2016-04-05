@@ -236,6 +236,16 @@ The following content will be saved in partials cache. During rendering all incl
 ### addTemplate()
 ### addTransform()
 
+## Release history
+
+### 0.3.0
+1. Glob patterns in `src` attribute for `include` tag
+2. Transforming functions with declarative usage
+
+### 0.2.0
+1. Custom templates
+2. Decorating partials before putting to the cache
+
 ## License
 
 MIT © [Sebastian Kuligowski](http://kuligowski.pl)
