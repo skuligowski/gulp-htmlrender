@@ -1,6 +1,6 @@
 {
   "name": "gulp-htmlrender",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Render html files from relative partials",
   "license": "MIT",
   "repository": "skuligowski/gulp-htmlrender",
@@ -28,6 +28,7 @@
     "precompile"
   ],
   "dependencies": {
+    "glob": "^7.0.3",
     "gulp-util": "^3.0.0",
     "through2": "^0.6.1"
   },

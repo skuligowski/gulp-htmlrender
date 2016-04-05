@@ -3,19 +3,31 @@ var gutil = require('gulp-util');
 var through = require('through2');
 var path = require('path');
 var fs = require('fs');
+var glob = require('glob');
 
-var varsCache = {},
-	partialsCache = {},
+var partialsCache = {},
+	transformsCache = {},
 	templates = [],
 	varRegExpCache = {},
 	attrRegExpCache = {},
 	includeRegExp = /<%include ([^>]+)%>/gim,
 	attrTemplateRegExp = /\{\{[ ]*([a-zA-Z]+)[ ]*\}\}/gim,
-	getSrcAttr = createGetAttrFn('src');
+	getSrcAttr = createGetAttrFn('src'),
+	getTransformAttr = createGetAttrFn('transform'),
+	options = {
+		delimiter: '\n'
+	};
 
 function renderPartial(partialPath) {
 	var partial = getPartial(partialPath);
 	return includePartial(partial);
+}
+
+function getPartialContent(dir, src, transform) {
+	var childPartialPath = path.join(dir, src),
+		childPartial = getPartial(childPartialPath, transform);
+
+	return (typeof childPartial !== 'undefined') ? includePartial(childPartial) : '';
 }
 
 function includePartial(partial) {
@@ -29,24 +41,36 @@ function includePartial(partial) {
 
 	for(var i = 0, max = matches.length; i < max; i++) {
 		var src = getSrcAttr(matches[i]);
+
 		if (!src) {
 			gutil.log(gutil.colors.red('ERROR:'), 'Invalid src attribute in',
 				gutil.colors.green(matches[i]), gutil.colors.blue('(' + partial.path + ')'));
 			continue;
 		}
 
-		var childPartialPath = path.join(dir, src),
-			childPartial = getPartial(childPartialPath);
+		var transform = getTransformAttr(matches[i]);
 
-		if (typeof childPartial !== "undefined") {
-			html = html.replace(matches[i], includePartial(childPartial));
+		var partialContent = '';
+		if (glob.hasMagic(src)) {
+			var files = glob.sync(src, {cwd: dir}).sort(),
+				htmlParts = [];
+			for(var j = 0; j < files.length; j++) {
+				htmlParts.push(getPartialContent(dir, files[j], transform));
+			}
+			partialContent = htmlParts.join(options.delimiter);
+		} else {
+			partialContent = getPartialContent(dir, src, transform);
+		}
+
+		if (partialContent) {
+			html = html.replace(matches[i], partialContent);
 		}
 	}
 
 	return html;
-};
+}
 
-function getPartial(partialPath) {
+function getPartial(partialPath, transform) {
 	var partial = partialsCache[partialPath],
 		stat = getPartialStat(partialPath);
 
@@ -55,9 +79,9 @@ function getPartial(partialPath) {
 		return undefined;
 	}
 
-	if (!partial || partial.mtime < stat.mtime) {
+	if (!partial || partial.mtime < stat.mtime || partial.transform != transform) {
 		var partialContent = fs.readFileSync(partialPath, 'utf8');
-		partial = cachePartial(partialPath, partialContent, stat.mtime);
+		partial = cachePartial(partialPath, partialContent, transform, stat.mtime);
 	}
 
 	return partial;
@@ -72,23 +96,35 @@ function getPartialStat(partialPath) {
 }
 
 function applyTemplates(html) {
-	for(var i = 0; i < templates.length; i++)
+	for(var i = 0; i < templates.length; i++) {
 		html = templates[i](html);
+	}
 	return html;
 }
 
-function cachePartial(partialPath, content, mtime) {
-	return partialsCache[partialPath] = {
-		content: applyTemplates(content),
-		mtime: mtime,
-		dir: path.dirname(partialPath),
-		path: partialPath
+function applyTransform(content, transform, partialPath) {
+	var transformFn = transformsCache[transform];
+	if (transform && !transformFn) {
+		gutil.log(gutil.colors.red('ERROR:'), 'Transform', transform, 'does not exists');
 	}
+	return transformFn ? transformFn(content, partialPath) : content;
+}
+
+function cachePartial(partialPath, content, transform, mtime) {
+	var templatedContent = applyTemplates(content),
+		transformedContent = applyTransform(templatedContent, transform, partialPath),
+		partial = partialsCache[partialPath] = {
+			content: transformedContent,
+			mtime: mtime,
+			dir: path.dirname(partialPath),
+			path: partialPath,
+			transform: transform ? transform : null
+		};
+	return partial;
 }
 
 function updatePartialFromVinyl(vinylFile) {
-	var partial = partialsCache[vinylFile.path];
-	cachePartial(vinylFile.path, vinylFile.contents.toString('utf8'), vinylFile.stat.mtime);
+	cachePartial(vinylFile.path, vinylFile.contents.toString('utf8'), null, vinylFile.stat.mtime);
 }
 
 function addTemplate(name, template) {
@@ -114,12 +150,16 @@ function addTemplate(name, template) {
 	});
 }
 
+function addTransform(name, transformFn) {
+	transformsCache[name] = transformFn;
+}
+
 function resolveTemplateAttrs(template) {
 	var match,
 		existingAttrs = {},
 		attrs = [];
 
-	while(match = attrTemplateRegExp.exec(template)) {
+	while(!!(match = attrTemplateRegExp.exec(template))) {
 		var attr = match[1];
 		if (!existingAttrs[attr]) {
 			attrs.push(attr);
@@ -137,7 +177,7 @@ function createGetAttrFn(attr) {
 	return function(html) {
 		var attrMatch = html.match(getAttrRegExp(attr));
 		return attrMatch ? attrMatch[1] : null;
-	}
+	};
 }
 
 function getVarRegExp(varName) {
@@ -147,14 +187,16 @@ function getVarRegExp(varName) {
 function createVarDecorator(varName, value) {
 	return function(content) {
 		return content.replace(getVarRegExp(varName), value);
-	}
+	};
 }
 
 function createVarsDecorators(vars) {
 	var decoratorFns = [];
-	for(var varName in vars) if (vars.hasOwnProperty(varName)) {
-		var value = typeof vars[varName] === 'function' ? vars[varName]() : vars[varName];
-		decoratorFns.push(createVarDecorator(varName, value));
+	for(var varName in vars) {
+		if (vars.hasOwnProperty(varName)) {
+			var value = typeof vars[varName] === 'function' ? vars[varName]() : vars[varName];
+			decoratorFns.push(createVarDecorator(varName, value));
+		}
 	}
 	return decoratorFns;
 }
@@ -185,8 +227,9 @@ function createDecorator() {
 
 				var contents = file.contents.toString('utf8');
 
-				for (var i = 0; i < decoratorFns.length; i++)
+				for (var i = 0; i < decoratorFns.length; i++) {
 					contents = decoratorFns[i](contents);
+				}
 
 				var newFile = file.clone({contents: false});
 				newFile.contents = new Buffer(contents);
@@ -238,9 +281,10 @@ module.exports.render = function() {
 
 module.exports.cache = function() {
 	return cache();
-}
+};
 
 module.exports.decorator = function() {
 	return createDecorator();
 };
 module.exports.addTemplate = addTemplate;
+module.exports.addTransform = addTransform;
